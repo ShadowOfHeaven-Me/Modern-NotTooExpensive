@@ -8,7 +8,7 @@ tasks.withType<JavaCompile> {
 }
 
 group = "anvil.fix"
-version = "1.1"
+version = "2.0"
 
 tasks.create<Copy>("copyShadowOutputToLocalServer") {
     from(tasks.jar)
@@ -30,7 +30,7 @@ repositories {
     maven("https://oss.sonatype.org/content/repositories/snapshots")
     maven("https://oss.sonatype.org/content/repositories/central")
 
-    //maven("https://repo.codemc.io/repository/maven-releases/")
+    maven("https://repo.codemc.io/repository/maven-releases/")
 
     //maven("https://repo.papermc.io/repository/maven-public/")
     //maven("https://repo.extendedclip.com/content/repositories/placeholderapi/")
@@ -41,6 +41,7 @@ repositories {
 dependencies {
     compileOnly("org.spigotmc:spigot-api:1.20.1-R0.1-SNAPSHOT")
     compileOnly("org.spigotmc:spigot:1.20.1-R0.1-SNAPSHOT")
+    compileOnly("com.github.retrooper:packetevents-spigot:2.4.0")
     //compileOnly("org.spigotmc:spigot:1.20.5-R0.1-SNAPSHOT:remapped-mojang")
 
     //compileOnly("io.papermc.paper:paper-api:1.21-R0.1-SNAPSHOT")
