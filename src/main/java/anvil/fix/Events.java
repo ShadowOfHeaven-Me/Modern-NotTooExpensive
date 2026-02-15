@@ -1,10 +1,12 @@
 package anvil.fix;
 
 import com.github.retrooper.packetevents.PacketEvents;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryType;
@@ -35,74 +37,82 @@ public final class Events implements Listener {
 
     public static final Map<UUID, Integer> preparing = new ConcurrentHashMap<>();
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.HIGH)
     public void onAnvilPrepare(PrepareAnvilEvent event) {
-        if (!(event.getView().getPlayer() instanceof Player)) return;
+        //Bukkit.broadcastMessage("PrepareAnvilEvent");
+        if (!(event.getView().getPlayer() instanceof Player player)) return;
 
-        Player player = (Player) event.getView().getPlayer();
         AnvilInventory inv = event.getInventory();
 
         //Bukkit.broadcastMessage("MAX " + inv.getMaximumRepairCost() + " COST: " + inv.getRepairCost() + " AMOUNT: " + inv.getRepairCostAmount());
 
         //Bukkit.broadcastMessage("INVOKED WITH COST: " + inv.getRepairCost() + " RENAME: '" + inv.getRenameText() + "'");
 
-        inv.setMaximumRepairCost(40_000);
+        inv.setMaximumRepairCost(Integer.MAX_VALUE - 10);
 
-        if (inv.getItem(2) == null || inv.getRepairCost() >= 0 && inv.getRepairCost() <= 39) {
+        //39 is the max
+        //at 40, "Too Expensive" shows up
+        if (/*inv.getItem(2) == null ||*/ inv.getRepairCost() >= 0 && inv.getRepairCost() <= 39) {
             this.onRemove(player);
             //Bukkit.broadcastMessage("RESULT REMOVEDDDDD");
             return;
         }
 
-        ItemStack book = inv.getItem(1);
-        if (book == null) return;
+        ItemStack combineWith = inv.getItem(1);
+        if (combineWith == null || combineWith.getType().isAir()) return;
+
+        Material combineType = combineWith.getType();
+
+        ItemStack input = inv.getItem(0);
+        if (input == null) return;
 
         //Integer level = preparing.get(player.getUniqueId());
 
-        //39 is the max
-        //at 40, "Too Expensive" shows up
-        if (book.getType() == Material.ENCHANTED_BOOK) {
+        Material inputType = input.getType();
 
-            ItemStack input = inv.getItem(0);
-            if (input == null) return;
+        if (combineType != Material.ENCHANTED_BOOK && combineType != Material.BOOK && combineType != inputType && inv.getItem(2) == null)
+            return;
 
-            ItemStack result = input.clone();//already done with "asMirrorCopy", but it's best to be safe
-            Map<Enchantment, Integer> enchantsOnInput = input.getEnchantments();
+        ItemStack result = input.clone();//already done with "asMirrorCopy", but it's best to be safe
+        Map<Enchantment, Integer> enchantsOnInput = input.getEnchantments();
 
-            EnchantmentStorageMeta meta = (EnchantmentStorageMeta) book.getItemMeta();
-            assert meta != null;
-            Set<Map.Entry<Enchantment, Integer>> enchantsOnBook = meta.getStoredEnchants().entrySet();
+        var meta = combineWith.getItemMeta();
+        assert meta != null;
+        Map<Enchantment, Integer> enchants = meta instanceof EnchantmentStorageMeta e ? e.getStoredEnchants() : meta.getEnchants();
+        Set<Map.Entry<Enchantment, Integer>> enchantsOnBook = enchants.entrySet();
 
-            float cost = this.calculateInitialCost(enchantsOnInput);
-            int applied = 0;
+        float cost = this.calculateInitialCost(enchantsOnInput);
+        int applied = 0;
 
-            for (Map.Entry<Enchantment, Integer> e : enchantsOnBook) {
-                Enchantment enchantment = e.getKey();
-                if (result.getEnchantmentLevel(enchantment) < e.getValue() && !this.hasConflicting(enchantsOnInput, enchantment) && enchantment.canEnchantItem(input)) {
-                    result.addUnsafeEnchantment(e.getKey(), e.getValue());
-                    applied++;
-                    //Bukkit.broadcastMessage("VVVVV " + e.getValue());
-                    cost += e.getValue() * 1.5f;
-                }
+        for (Map.Entry<Enchantment, Integer> e : enchantsOnBook) {
+            Enchantment enchantment = e.getKey();
+            int level = e.getValue();
+            if (result.getEnchantmentLevel(enchantment) < level && !this.hasConflicting(enchantsOnInput, enchantment) && enchantment.canEnchantItem(input)) {
+                result.addUnsafeEnchantment(enchantment, level);
+                applied++;
+                //Bukkit.broadcastMessage("VVVVV " + e.getValue());
+                cost += level * 1.5f;
             }
-
-            if (applied == 0) return;
-
-            String rename = inv.getRenameText();
-            if (rename != null && !rename.isEmpty()) {
-                cost++;
-                ItemMeta resultMeta = result.getItemMeta();
-                assert resultMeta != null;//pretty much useless
-                resultMeta.setDisplayName(rename);
-                result.setItemMeta(resultMeta);
-            }
-
-            event.setResult(result);
-            inv.setRepairCost((int) cost);
-            //Bukkit.broadcastMessage("APPLIED: " + applied + " COST: " + inv.getRepairCost());
-            preparing.put(player.getUniqueId(), (int) cost);
-            PacketEvents.getAPI().getPlayerManager().sendPacket(player, PacketListener.create(player, true));
         }
+
+        //Bukkit.broadcastMessage("PRE TO APPLIED: " + applied);
+
+        if (applied == 0) return;
+
+        String rename = inv.getRenameText();
+        if (rename != null && !rename.isEmpty()) {
+            cost++;
+            ItemMeta resultMeta = result.getItemMeta();
+            assert resultMeta != null;//pretty much useless
+            resultMeta.setDisplayName(rename);
+            result.setItemMeta(resultMeta);
+        }
+
+        event.setResult(result);
+        inv.setRepairCost((int) cost);
+        //Bukkit.broadcastMessage("APPLIED: " + applied + " COST: " + inv.getRepairCost());
+        preparing.put(player.getUniqueId(), (int) cost);
+        PacketEvents.getAPI().getPlayerManager().sendPacket(player, PacketListener.create(player, true));
     }
 
     private float calculateInitialCost(Map<Enchantment, Integer> inputEnchants) {
@@ -123,9 +133,8 @@ public final class Events implements Listener {
 
     @EventHandler
     public void onClose(InventoryCloseEvent event) {
-        if (!(event.getPlayer() instanceof Player)) return;
+        if (!(event.getPlayer() instanceof Player player)) return;
         if (event.getView().getTopInventory().getType() == InventoryType.ANVIL) {
-            Player player = (Player) event.getPlayer();
             this.onRemove(player);
             //Bukkit.broadcastMessage("REMOVED");
         }
@@ -133,7 +142,8 @@ public final class Events implements Listener {
     }
 
     private void onRemove(Player player) {
-        if (preparing.remove(player.getUniqueId()) != null) PacketEvents.getAPI().getPlayerManager().sendPacket(player, PacketListener.createExact(player));
+        if (preparing.remove(player.getUniqueId()) != null)
+            PacketEvents.getAPI().getPlayerManager().sendPacket(player, PacketListener.createExact(player));
     }
 
 /*    @EventHandler

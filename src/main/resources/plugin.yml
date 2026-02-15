@@ -1,5 +1,5 @@
 main: anvil.fix.Main
-version: 2.0
+version: 2.3
 name: Modern-NotTooExpensive
 api-version: 1.13
 softdepend:
